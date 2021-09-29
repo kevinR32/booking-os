@@ -1,87 +1,122 @@
 //David Sequera
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <stdlib.h>
 #include <fcntl.h>
-#include <stdio.h>
-#include <string.h>
-#include "book.h"
+#include <signal.h>
 
-void EnviarPipe(book *miemp, int cuantos,char pipe[]) {
-  book em;
-  int i, creado, fd;
-  fd = open(pipe, O_WRONLY);
-     if (fd == -1) {
-         perror("pipe");
-         printf(" Se volvera a intentar despues\n");
-	 sleep(5);        
-  }
-  // este código lo tienen que hacer Uds. Deben abrir el pipe y enviar los datos. 
-  write (fd, &cuantos, sizeof(int));
-  for (size_t i = 0; i < cuantos; i++)
-  {
-    write (fd, &miemp[i] , sizeof(book));
-  }
-	sleep(5);        
+#include "conexion.h" 
 
-  close(fd);
+//main functions
+int queriesManager(int qc,query []);
+int readQueries(int ap, query []);
+
+//subfunctions
 
 
-}
-
-/* asignar
-   inserta un nuevo empleado en la lista en la posicion pos
-   e inicializa su edad, tiempo de trabajo y nombre
-*/
-void asignar(book *emp, char *nombre, int edad, float salary, int pos)
+int main (int argc, char **argv)
 {
-     
-  char *p;
-  emp[pos].edad = edad;
-  emp[pos].salario = salary;
-  strcpy(emp[pos].nombre, nombre);
- 
-}
+//CONTROL
+    if(argc != 3){//./e pipe db
+        printf ("Bad request: Check Documentation\n");
+        exit(1);
+    }
 
-/* imprimir
-   imprime los primeros cuantos empleados del arreglo
-*/
-void  imprimir(book *emp, int cuantos)
-{
-  int i;
-
-    printf("Empleados:\n");
-
-  for(i=0; i < cuantos; i++)
-    printf("%s %d %f\n",  emp[i].nombre, emp[i].edad, emp[i].salario);
-}
+  int tp,ap, pid,bytes; //THEPIPE = tp A PIPE = ap
+  query queries[MAXQUERIES];//BUFFER
 
 
-int main(int argc, char *argv[]) 
-{
-  book miemp[MAXEMP];
-  char line[MAXLIN], nom[MAXNOMBRE];
-  FILE *fp;
-  int i, edad=0;
-  float salario;
+//OPEN PIPE
+  mode_t fifo_mode = S_IRUSR | S_IWUSR;
   
-  fp = fopen(argv[1], "r");
-  i = 0;
-
-  while (!feof(fp))  {
-    fscanf(fp, "%s %d %f\n", nom,&edad, &salario);
-    /* printf("valid: %s\n", line); */
-    /* printf("%d, %d, %s\n", edad, tiempo, nom); */
-    asignar(miemp, nom, edad, salario, i++);
+  unlink("ThePipe");
+  if (mkfifo ("ThePipe", fifo_mode) == -1) {
+     perror("[mkfifo]");
+     exit(1);
   }
   
-  imprimir(miemp, i);
-  // Enviar por el pipe
+  tp = open ("ThePipe", O_RDONLY);
+  printf ("Pipe Opening\n");
 
-  
-  EnviarPipe(miemp,i,argv[2]);
-  
+//READ QUERIES
+    // query counter
+    int qc= readQueries(tp,queries);
+  //queryManager
+    queriesManager(qc, queries);
 
-     
-  fclose(fp); 
+    /* toca usar un hilo  */
+//RESPOND QUERIES
+    queries[0].status = 200;
+    for (size_t i = 0; i < qc; i++)
+    {
+      ap = open(queries[i].pipe, O_WRONLY);
+      if (ap == -1) {
+        perror("A Pipe");
+        printf(" Se volvera a intentar despues\n");
+	      sleep(5);        
+      }
+      printf ("Open Apipe\n");
+      write (ap, &queries[i], sizeof(query));
+    }
+    
+
 }
+
+
+int queriesManager(int qc,query *qv){
+  int i = 0;
+  int founded = 0;
+  book b;
+  copy c;
+  int size = 100;
+  char* sample;
+  FILE *fi, *fo;
+  fi = fopen("dbin", "r");//recuerda cambiar el argv
+  fo = fopen("dbout", "w");
+  sample = (char *) malloc (size);
+  while (!feof(fi))  {
+    getline(&sample,&size,fi);
+    printf("%s",sample);
+    // fscanf(fi,"%[^,]s,%d,%d\n", b.name,&b.ISBN,&b.copies);
+    // printf("%s,%d,%d\n", b.name,b.ISBN,b.copies);
+    // for (size_t v = 0; v < qc; v++)
+    // {
+    //   printf("Comparing\n");
+    //   if(strcmp(b.name,(qv+v)->book) == 0   && b.ISBN == (qv+v)->ISBN){//comparar 2 strings
+    //     founded = 1;
+    //     printf("Founded\n");
+    //   }
+    // }
+    // for (size_t j = 0; j < b.copies; j++)
+    // {
+    //   fscanf(fi, "%d,%c,%d-%d-%d\n",&c.index,&c.state,&(c.date.day),&(c.date.month),&(c.date.year));
+    //   if(founded){
+    //     printf("LO LOGRAMOS");
+    //   }
+    // }    
+    i++;
+  }
+  printf("\n");
+  fclose(fi);
+  fclose(fo);
+}
+
+
+int readQueries(int tp, query *qv){
+    int qc= 0, bytes;
+    while (qc != 1)  {//!feof(tp)
+        bytes = read (tp, &qv[qc], sizeof(query));
+        printf("Type: %c\tName: %s\tISBN: %d\tStatus: %d\tPipeName: %s\n",  qv[qc].type,qv[qc].book,qv[qc].ISBN,qv[qc].status,qv[qc].pipe);
+        qc++;
+        if (bytes == -1) {
+            perror("[Reading Queries]");
+            exit(1);
+        }
+    }
+    return qc;
+}
+
+
