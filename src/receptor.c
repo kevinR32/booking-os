@@ -13,8 +13,9 @@
 //main functions
 int queriesManager(int qc,query []);
 int readQueries(int ap, query []);
-
+int readBook(char *str, book *);
 //subfunctions
+int fileEdit(char* path,int start,int end, char* token);
 
 
 int main (int argc, char **argv)
@@ -67,7 +68,7 @@ int main (int argc, char **argv)
 
 
 int queriesManager(int qc,query *qv){
-  int i = 0;
+  int qd = 0;//query done!
   int founded = 0;
   book b;
   copy c;
@@ -75,41 +76,37 @@ int queriesManager(int qc,query *qv){
   char* sample;
   FILE *fi, *fo;
   fi = fopen("dbin", "r");//recuerda cambiar el argv
-  fo = fopen("dbout", "w");
   sample = (char *) malloc (size);
   while (!feof(fi))  {
     getline(&sample,&size,fi);
-    printf("%s",sample);
-    // fscanf(fi,"%[^,]s,%d,%d\n", b.name,&b.ISBN,&b.copies);
-    // printf("%s,%d,%d\n", b.name,b.ISBN,b.copies);
-    // for (size_t v = 0; v < qc; v++)
-    // {
-    //   printf("Comparing\n");
-    //   if(strcmp(b.name,(qv+v)->book) == 0   && b.ISBN == (qv+v)->ISBN){//comparar 2 strings
-    //     founded = 1;
-    //     printf("Founded\n");
-    //   }
-    // }
-    // for (size_t j = 0; j < b.copies; j++)
-    // {
-    //   fscanf(fi, "%d,%c,%d-%d-%d\n",&c.index,&c.state,&(c.date.day),&(c.date.month),&(c.date.year));
-    //   if(founded){
-    //     printf("LO LOGRAMOS");
-    //   }
-    // }    
-    i++;
+    readBook(sample,&b);
+    for (size_t v = 0; v < qc; v++)
+    {
+      if(strcmp(b.name,(qv+v)->book) == 0   && b.ISBN == (qv+v)->ISBN){//comparar 2 strings
+        founded = 1;
+        printf("%s\t%d\t%d", b.name,b.ISBN,b.copies);
+      }
+    }
+    for (size_t j = 0; j < b.copies && !feof(fi) ; j++)
+    {
+      getline(&sample,&size,fi);
+      readCopy(sample,&c);
+      if(founded){
+        printf("%d,%c,%d-%d-%d\n",c.index,c.state,(c.date.day),(c.date.month),(c.date.year));
+        printf("Lo logramos\n");
+        founded = 0;
+      }
+    }    
+    qd++;
   }
-  printf("\n");
   fclose(fi);
-  fclose(fo);
 }
-
 
 int readQueries(int tp, query *qv){
     int qc= 0, bytes;
     while (qc != 1)  {//!feof(tp)
         bytes = read (tp, &qv[qc], sizeof(query));
-        printf("Type: %c\tName: %s\tISBN: %d\tStatus: %d\tPipeName: %s\n",  qv[qc].type,qv[qc].book,qv[qc].ISBN,qv[qc].status,qv[qc].pipe);
+        printf("Type:%c\tName:%s\tISBN:%d\tStatus:%d\tPipeName:%s\n",  qv[qc].type,qv[qc].book,qv[qc].ISBN,qv[qc].status,qv[qc].pipe);
         qc++;
         if (bytes == -1) {
             perror("[Reading Queries]");
@@ -117,6 +114,56 @@ int readQueries(int tp, query *qv){
         }
     }
     return qc;
+}
+
+// converts a string into a book
+int readBook(char *str, book *b){
+  sscanf(str,"%[^,]s", b->name);
+  sscanf(&str[strlen(b->name)],",%d,%d",&b->ISBN,&b->copies);
+  return 0;
+}
+
+// converts a string into a copy
+int readCopy(char *str, copy *c){
+  sscanf(str, "%d,%c,%d-%d-%d",&c->index,&c->state,&(c->date.day),&(c->date.month),&(c->date.year)); 
+  return 0; 
+}
+
+int fileEdit(char* path,int start,int end, char* token){
+    int fend = 0;
+    FILE *f;//CONTROL
+    if((f = fopen(path, "rb")) == NULL){
+        printf("[fileEdit] Error opening file\n");
+        return -1;
+    }
+
+    fseek(f, 0L, SEEK_END);
+    fend = ftell(f);
+    fseek(f, 0L, SEEK_SET);
+
+    if( end > fend)
+        end = fend;
+    if(start > end || start < 0){
+        printf("[fileEdit] Incorrect params or/and overlaod\n");
+        return -1;
+    }
+    char a[start+1],b[fend-end+1];
+//COPY
+    fread(a, start, 1, f);
+    fseek(f, (long)end, SEEK_SET);
+    fread(b, fend-end, 1, f);
+    fclose(f);
+
+//WRITE
+    if((f = fopen(path, "wb")) == NULL){
+        printf("[fileEdit] Error opening file\n");
+        return -1;
+    }
+    fwrite(a, start, 1, f);
+    fwrite(token, strlen(token), 1, f);
+    fwrite(b, fend-end, 1, f);    
+    fclose(f);
+    return 0;
 }
 
 
